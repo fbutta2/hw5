@@ -14,6 +14,7 @@
 #include <unistd.h>
 
 #define BACKLOG (10)
+#define check_file 0
 
 void serve_request(int);
 
@@ -38,16 +39,8 @@ char * request_pdf = "HTTP/1.0 200 OK\r\n"
 const char * request_notfound  = "HTTP/1.0 404 NOT FOUND\r\n"
         "Content-type: text/html; charset=UTF-8\r\n\r\n";
 
-char * error_display = "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 3.2 Final//EN\"><html>"
-        "<title>404 ERROR NOT FOUND</title>"
-"<body>"
-"<h2>404 ERROR NOT FOUND</h2><hr><ul>";
 
-char * generate_404( char * tmp_file) {
-   char * x = malloc(512);
-   sprintf(x, request_notfound, error_display);
-   return x; 
-}
+
 
 char * index_hdr = "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 3.2 Final//EN\"><html>"
         "<title>Directory listing for %s</title>"
@@ -85,6 +78,7 @@ char* parseRequest(char* request) {
 void serve_request(int client_fd){
   int read_fd;
   int bytes_read;
+  int check_val;
   int file_offset = 0;
   char client_buf[4096];
   char send_buf[4096];
@@ -99,20 +93,76 @@ void serve_request(int client_fd){
       break;
   }
   requested_file = parseRequest(client_buf);
-  send(client_fd,request_str,strlen(request_str),0);
+  
+  printf("%s\n", requested_file);
+  struct stat check_File;
+  
+  if (stat(&requested_file[1], &check_File) != 0) { // File doesn't exist
+	  request_str = "HTTP/1.0 404 Not found\r\n"
+		"Content-type: text/html; charset=UTF-8\r\n\r\n";
+	  //requested_file = "/404.html";
+	  check_val = send(client_fd,request_str,strlen(request_str),0);
+	  
+	  char* send_buf = "<html><head><title>404</title></head>"
+			"<body>"
+			"<h1>404 File Not Found!</h1>"
+			"</body></html>";
+
+	  check_val = send(client_fd,send_buf,strlen(send_buf),0);
+	   
+	  close(client_fd);
+	  return;
+  
+}
+  else if (strstr(requested_file, ".html")){
+	  request_str = "HTTP/1.0 200 OK\r\n"
+        "Content-type: text/html; charset=UTF-8\r\n\r\n";
+check_val = send(client_fd,request_str,strlen(request_str),0);
+  }
+   else if (strstr(requested_file, ".pdf")){
+	  request_str = "HTTP/1.0 200 OK\r\n"
+        "Content-type: application/pdf; charset=UTF-8\r\n\r\n";
+check_val = send(client_fd,request_str,strlen(request_str),0);
+  }
+  else if (strstr(requested_file, ".gif")){
+	  request_str = "HTTP/1.0 200 OK\r\n"
+        "Content-type: image/gif; charset=UTF-8\r\n\r\n";
+check_val = send(client_fd,request_str,strlen(request_str),0);
+  }
+  else if (strstr(requested_file, ".png")){
+	  request_str = "HTTP/1.0 200 OK\r\n"
+        "Content-type: image/png; charset=UTF-8\r\n\r\n";
+check_val = send(client_fd,request_str,strlen(request_str),0);
+  }
+  else if (strstr(requested_file, ".jpg")){
+	  request_str = "HTTP/1.0 200 OK\r\n"
+        "Content-type: image/gif; charset=UTF-8\r\n\r\n";
+check_val = send(client_fd,request_str,strlen(request_str),0);
+  }
+  else {
+	  request_str = "HTTP/1.0 200 OK\r\n"
+        "Content-type: text/plain; charset=UTF-8\r\n\r\n";
+check_val = send(client_fd,request_str,strlen(request_str),0);
+  }
+
+  //check_val = send(client_fd,request_str,strlen(request_str),0);
   // take requested_file, add a . to beginning, open that file
   filename[0] = '.';
   strncpy(&filename[1],requested_file,4095);
   read_fd = open(filename,0,0);
+  
+  
+  
+  printf("Path: %s\n", filename);
   while(1){
     bytes_read = read(read_fd,send_buf,4096);
     if(bytes_read == 0)
       break;
 
-    send(client_fd,send_buf,bytes_read,0);
+   check_val = send(client_fd,send_buf,bytes_read,0);
   }
   close(read_fd);
-  close(client_fd);
+
   return;
 }
 
@@ -215,8 +265,13 @@ int main(int argc, char** argv) {
 
         /* ALWAYS check the return value of send().  Also, don't hardcode
          * values.  This is just an example.  Do as I say, not as I do, etc. */
-        serve_request(sock);
-
+	int pid = fork();
+	if(pid < 0)
+		exit(1);
+	else if( pid == 0){
+	    serve_request(sock);
+		exit(0);
+}
         /* Tell the OS to clean up the resources associated with that client
          * connection, now that we're done with it. */
         close(sock);
